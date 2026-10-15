@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invitation · MySport</title>
+<meta name="robots" content="noindex">
+<meta property="og:title" content="Tu es invité sur MySport">
+<meta property="og:description" content="Rejoins MySport, le réseau social multisport : trouve des partenaires, organise tes matchs, progresse.">
+<meta name="theme-color" content="#0A1A2B">
+<style>
+  :root {
+    --fond: #0A1A2B;
+    --surface: #12263A;
+    --ligne: #1F3A52;
+    --texte: #F2F6FA;
+    --texte2: #A9B8C7;
+    --turquoise: #1EC8B0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--fond);
+    color: var(--texte);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .page { max-width: 480px; margin: 0 auto; padding: 28px 20px 40px; }
+  .logo { font-weight: 800; font-style: italic; font-size: 26px; letter-spacing: -0.5px; }
+  .logo span { color: var(--turquoise); }
+  .carte {
+    margin-top: 24px;
+    padding: 22px;
+    border-radius: 22px;
+    background: var(--surface);
+    border: 1px solid var(--ligne);
+  }
+  .emoji { font-size: 52px; text-align: center; }
+  h1 { font-size: 24px; margin: 8px 0 4px; text-align: center; }
+  .sport { font-weight: 700; font-size: 14px; margin-top: 16px; }
+  .titre { font-weight: 700; font-size: 20px; margin: 2px 0 10px; }
+  .ligne { margin: 4px 0; }
+  .discret { color: var(--texte2); }
+  .code-bloc { margin-top: 22px; text-align: center; }
+  .code {
+    display: inline-block;
+    margin: 6px 0 10px;
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: 2px dashed var(--turquoise);
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: 4px;
+  }
+  button {
+    display: block;
+    width: 100%;
+    height: 52px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--turquoise);
+    color: #04201C;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  ol { padding-left: 22px; margin: 18px 0 0; }
+  ol li { margin: 8px 0; }
+  .bientot {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(30, 200, 176, 0.12);
+    color: var(--texte);
+    font-size: 15px;
+  }
+  footer { margin-top: 30px; text-align: center; font-size: 14px; }
+  footer a { color: var(--texte2); margin: 0 8px; }
+  .cache { display: none; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="logo">My<span>Sport</span></div>
+
+  <div id="chargement" class="carte discret">Chargement de l'invitation…</div>
+
+  <div id="erreur" class="carte cache">
+    <div class="emoji">🤔</div>
+    <h1>Invitation indisponible</h1>
+    <p id="erreur-texte" class="discret" style="text-align:center"></p>
+  </div>
+
+  <div id="invitation" class="carte cache">
+    <div id="emoji" class="emoji">🎾</div>
+    <h1 id="invite"></h1>
+    <div id="details"></div>
+
+    <div class="code-bloc">
+      <div class="discret">Ton code d'invitation</div>
+      <div id="code" class="code"></div>
+      <button id="copier" type="button">Copier le code</button>
+    </div>
+
+    <ol>
+      <li>Installe l'application MySport sur ton téléphone.</li>
+      <li>Crée ton compte en quelques secondes.</li>
+      <li>Va dans <strong>Profil → Mon profil public → Inviter des amis</strong>, puis entre ce code dans « Tu as reçu un code ? ».</li>
+    </ol>
+    <div class="bientot">📱 MySport arrive bientôt sur l'App Store et Google Play.</div>
+  </div>
+
+  <footer>
+    <a href="mentions-legales.html">Mentions légales</a>
+    <a href="confidentialite.html">Confidentialité</a>
+  </footer>
+</div>
+
+<script>
+  // ⚠️ À remplir avec les valeurs de ton projet Supabase (les mêmes que dans le fichier .env de l'app)
+  const SUPABASE_URL = "https://TON-PROJET.supabase.co";
+  const SUPABASE_CLE = "TA-CLE-ANON-PUBLIQUE";
+
+  const RAISONS = {
+    inconnu: "Ce code n'existe pas ou n'est plus actif. Vérifie le lien reçu.",
+    passe: "Cette activité est déjà passée.",
+    ferme: "Les inscriptions de ce tournoi sont fermées.",
+    supprime: "L'activité ou le tournoi a été supprimé.",
+    reseau: "Impossible de charger l'invitation. Vérifie ta connexion et réessaie.",
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function afficherErreur(raison) {
+    $("chargement").classList.add("cache");
+    $("erreur-texte").textContent = RAISONS[raison] || RAISONS.inconnu;
+    $("erreur").classList.remove("cache");
+  }
+
+  function ajouterLigne(parent, texte, classe) {
+    const p = document.createElement("p");
+    p.className = classe || "ligne";
+    p.textContent = texte;
+    parent.appendChild(p);
+  }
+
+  function formaterDate(iso) {
+    const d = new Date(iso);
+    const jour = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Paris" });
+    const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
+    return jour + " à " + heure;
+  }
+
+  async function charger() {
+    const brut = new URLSearchParams(window.location.search).get("c") || "";
+    const code = brut.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    if (code.length !== 8) {
+      afficherErreur("inconnu");
+      return;
+    }
+
+    let apercu;
+    try {
+      const reponse = await fetch(SUPABASE_URL + "/rest/v1/rpc/apercu_invitation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_CLE },
+        body: JSON.stringify({ p_code: code }),
+      });
+      if (!reponse.ok) throw new Error("HTTP " + reponse.status);
+      apercu = await reponse.json();
+    } catch (e) {
+      afficherErreur("reseau");
+      return;
+    }
+
+    if (!apercu || !apercu.valide) {
+      afficherErreur((apercu && apercu.raison) || "inconnu");
+      return;
+    }
+
+    const details = $("details");
+    if (apercu.type === "parrainage") {
+      $("emoji").textContent = "🎁";
+      $("invite").textContent = apercu.auteur + " t'invite sur MySport";
+      ajouterLigne(details, "Le réseau social multisport : trouve des partenaires près de chez toi, organise tes matchs et suis ton niveau.", "discret");
+      ajouterLigne(details, "Avec ce code, vous gagnez tous les deux 10 pts de Sport Score.", "ligne");
+    } else {
+      $("emoji").textContent = apercu.sport_emoji || "🎾";
+      $("invite").textContent = apercu.auteur + " t'invite";
+      const sport = document.createElement("div");
+      sport.className = "sport";
+      sport.style.color = apercu.sport_couleur || "#1EC8B0";
+      sport.textContent = (apercu.sport_emoji || "") + " " + (apercu.sport_nom || "") + " · " + (apercu.genre || "");
+      details.appendChild(sport);
+      ajouterLigne(details, apercu.titre || "", "titre");
+      if (apercu.debut) ajouterLigne(details, "📅 " + formaterDate(apercu.debut));
+      if (apercu.lieu) ajouterLigne(details, "📍 " + apercu.lieu);
+      if (apercu.places) ajouterLigne(details, "👥 " + (apercu.inscrits || 0) + " inscrit(s) sur " + apercu.places + " places");
+      if (apercu.niveau) ajouterLigne(details, "📊 " + apercu.niveau);
+    }
+
+    $("code").textContent = code.slice(0, 4) + "-" + code.slice(4);
+    $("copier").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        $("copier").textContent = "Code copié ✓";
+      } catch (e) {
+        $("copier").textContent = "Recopie le code à la main";
+      }
+    });
+
+    $("chargement").classList.add("cache");
+    $("invitation").classList.remove("cache");
+  }
+
+  charger();
+</script>
+</body>
+</html>
