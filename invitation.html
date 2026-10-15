@@ -76,6 +76,7 @@
     color: var(--texte);
     font-size: 15px;
   }
+  .detail { margin-top: 10px; font-size: 13px; color: var(--texte2); text-align: center; word-break: break-word; opacity: 0.8; }
   footer { margin-top: 30px; text-align: center; font-size: 14px; }
   footer a { color: var(--texte2); margin: 0 8px; }
   .cache { display: none; }
@@ -91,6 +92,7 @@
     <div class="emoji">🤔</div>
     <h1>Invitation indisponible</h1>
     <p id="erreur-texte" class="discret" style="text-align:center"></p>
+    <p id="erreur-detail" class="detail cache"></p>
   </div>
 
   <div id="invitation" class="carte cache">
@@ -107,7 +109,7 @@
     <ol>
       <li>Installe l'application MySport sur ton téléphone.</li>
       <li>Crée ton compte en quelques secondes.</li>
-      <li>Va dans <strong>Profil → Mon profil public → Inviter des amis</strong>, puis entre ce code dans « Tu as reçu un code ? ».</li>
+      <li>Dans l'app, va dans l'onglet <strong>Profil</strong> → <strong>Inviter des amis</strong>, puis entre ce code dans « Tu as reçu un code ? ».</li>
     </ol>
     <div class="bientot">📱 MySport arrive bientôt sur l'App Store et Google Play.</div>
   </div>
@@ -120,7 +122,7 @@
 
 <script>
   // ⚠️ À remplir avec les valeurs de ton projet Supabase (les mêmes que dans le fichier .env de l'app)
-  const SUPABASE_URL = "https://ahcnrwpompzfesbknced.supabase.co";
+  const SUPABASE_URL = "https://https://ahcnrwpompzfesbknced.supabase.co.supabase.co";
   const SUPABASE_CLE = "sb_publishable_2ONotq191dax4ho74clkpw_WOfPNQ1_";
 
   const RAISONS = {
@@ -128,14 +130,20 @@
     passe: "Cette activité est déjà passée.",
     ferme: "Les inscriptions de ce tournoi sont fermées.",
     supprime: "L'activité ou le tournoi a été supprimé.",
-    reseau: "Impossible de charger l'invitation. Vérifie ta connexion et réessaie.",
+    reseau: "Impossible de joindre le serveur MySport. Vérifie ta connexion et réessaie.",
+    config: "Cette page n'est pas encore configurée : l'adresse ou la clé Supabase manque en bas du fichier invitation.html.",
+    serveur: "Le serveur MySport a refusé la demande.",
   };
 
   const $ = (id) => document.getElementById(id);
 
-  function afficherErreur(raison) {
+  function afficherErreur(raison, detail) {
     $("chargement").classList.add("cache");
     $("erreur-texte").textContent = RAISONS[raison] || RAISONS.inconnu;
+    if (detail) {
+      $("erreur-detail").textContent = "Détail technique : " + detail;
+      $("erreur-detail").classList.remove("cache");
+    }
     $("erreur").classList.remove("cache");
   }
 
@@ -161,17 +169,48 @@
       return;
     }
 
-    let apercu;
+    // L'adresse sans "/" ni "/rest/v1" à la fin, la clé sans espaces
+    const adresse = SUPABASE_URL.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
+    const cle = SUPABASE_CLE.trim();
+    if (!adresse.startsWith("https://") || adresse.includes("https://ahcnrwpompzfesbknced.supabase.co") || !cle || cle.includes("TA-CLE")) {
+      afficherErreur("config");
+      return;
+    }
+
+    const entetes = { "Content-Type": "application/json", apikey: cle };
+    // Ancienne clé « anon » (elle commence par eyJ) : on l'envoie aussi comme jeton
+    if (cle.startsWith("eyJ")) entetes.Authorization = "Bearer " + cle;
+
+    let reponse;
     try {
-      const reponse = await fetch(SUPABASE_URL + "/rest/v1/rpc/apercu_invitation", {
+      reponse = await fetch(adresse + "/rest/v1/rpc/apercu_invitation", {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_CLE },
+        headers: entetes,
         body: JSON.stringify({ p_code: code }),
       });
-      if (!reponse.ok) throw new Error("HTTP " + reponse.status);
+    } catch (e) {
+      afficherErreur("reseau", (e && e.message) || "pas de réponse");
+      return;
+    }
+
+    if (!reponse.ok) {
+      let detail = "HTTP " + reponse.status;
+      try {
+        const corps = await reponse.json();
+        const message = corps && (corps.message || corps.msg || corps.error);
+        if (message) detail += " · " + message;
+      } catch (e) {
+        // Réponse sans JSON : on garde juste le code HTTP
+      }
+      afficherErreur("serveur", detail);
+      return;
+    }
+
+    let apercu;
+    try {
       apercu = await reponse.json();
     } catch (e) {
-      afficherErreur("reseau");
+      afficherErreur("serveur", "réponse illisible");
       return;
     }
 
